@@ -572,7 +572,6 @@ var PtgDupes = {
 	/*::[*/0x5C/*::]*/: 0x3C, /*::[*/0x7C/*::]*/: 0x3C,
 	/*::[*/0x5D/*::]*/: 0x3D, /*::[*/0x7D/*::]*/: 0x3D
 };
-(function(){for(var y in PtgDupes) PtgTypes[y] = PtgTypes[PtgDupes[y]];})();
 
 var Ptg18 = {
 	/*::[*/0x01/*::]*/: { n:'PtgElfLel', f:parse_PtgElfLel },
@@ -597,12 +596,12 @@ var Ptg19 = {
 	/*::[*/0x08/*::]*/: { n:'PtgAttrGoto', f:parse_PtgAttrGoto },
 	/*::[*/0x10/*::]*/: { n:'PtgAttrSum', f:parse_PtgAttrSum },
 	/*::[*/0x20/*::]*/: { n:'PtgAttrBaxcel', f:parse_PtgAttrBaxcel },
+	/*::[*/0x21/*::]*/: { n:'PtgAttrBaxcel', f:parse_PtgAttrBaxcel },
 	/*::[*/0x40/*::]*/: { n:'PtgAttrSpace', f:parse_PtgAttrSpace },
 	/*::[*/0x41/*::]*/: { n:'PtgAttrSpaceSemi', f:parse_PtgAttrSpaceSemi },
 	/*::[*/0x80/*::]*/: { n:'PtgAttrIfError', f:parse_PtgAttrIfError },
 	/*::[*/0xFF/*::]*/: {}
 };
-Ptg19[0x21] = Ptg19[0x20];
 
 /* [MS-XLS] 2.5.198.103 ; [MS-XLSB] 2.5.97.87 */
 function parse_RgbExtra(blob, length, rgce, opts) {
@@ -646,7 +645,7 @@ function parse_Rgce(blob, length, opts) {
 	while(target != blob.l) {
 		length = target - blob.l;
 		id = blob[blob.l];
-		R = PtgTypes[id];
+		R = PtgTypes[id] || PtgTypes[PtgDupes[id]];
 		if(id === 0x18 || id === 0x19) R = (id === 0x18 ? Ptg18 : Ptg19)[blob[blob.l + 1]];
 		if(!R || !R.f) { /*ptgs.push*/(parsenoop(blob, length)); }
 		else { ptgs.push([R.n, R.f(blob, length, opts)]); }
@@ -690,10 +689,9 @@ var PtgBinOp = {
 };
 
 // List of invalid characters needs to be tested further
-var quoteCharacters /*:RegExp */ = new RegExp(/[^\w\u4E00-\u9FFF\u3040-\u30FF]/);
 function formula_quote_sheet_name(sname/*:string*/, opts)/*:string*/ {
 	if(!sname && !(opts && opts.biff <= 5 && opts.biff >= 2)) throw new Error("empty sheet name");
-	if (quoteCharacters.test(sname)) return "'" + sname + "'";
+	if (/[^\w\u4E00-\u9FFF\u3040-\u30FF]/.test(sname)) return "'" + sname + "'";
 	return sname;
 }
 function get_ixti_raw(supbooks, ixti/*:number*/, opts)/*:string*/ {
@@ -869,7 +867,8 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 				nameidx = (f[1][2]/*:any*/);
 				var lbl = (supbooks.names||[])[nameidx-1] || (supbooks[0]||[])[nameidx];
 				var name = lbl ? lbl.Name : "SH33TJSNAME" + String(nameidx);
-				if(name in XLSXFutureFunctions) name = XLSXFutureFunctions[name];
+				/* [MS-XLSB] 2.5.97.10 Ftab -- last verified 20220204 */
+				if(name && name.slice(0,6) == "_xlfn." && !opts.xlfn) name = name.slice(6);
 				stack.push(name);
 				break;
 

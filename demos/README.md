@@ -22,8 +22,8 @@ can be installed with Bash on Windows or with `cygwin`.
 - [`angular and ionic`](angular2/)
 - [`knockout`](knockout/)
 - [`meteor`](meteor/)
-- [`react and react-native`](react/)
-- [`vue 2.x and weex`](vue/)
+- [`react, react-native, next`](react/)
+- [`vue 2.x, weex, nuxt`](vue/)
 - [`XMLHttpRequest and fetch`](xhr/)
 - [`nodejs server`](server/)
 - [`databases and key/value stores`](database/)
@@ -40,6 +40,7 @@ can be installed with Bash on Windows or with `cygwin`.
 - [`webpack 2.x`](webpack/)
 
 **Platforms and Integrations**
+- [`deno`](deno/)
 - [`electron application`](electron/)
 - [`nw.js application`](nwjs/)
 - [`Chrome / Chromium extensions`](chrome/)
@@ -48,6 +49,8 @@ can be installed with Bash on Windows or with `cygwin`.
 - [`Headless Browsers`](headless/)
 - [`canvas-datagrid`](datagrid/)
 - [`x-spreadsheet`](xspreadsheet/)
+- [`react-data-grid`](react/modify/)
+- [`vue3-table-light`](/vue/modify/)
 - [`Swift JSC and other engines`](altjs/)
 - [`"serverless" functions`](function/)
 - [`internet explorer`](oldie/)

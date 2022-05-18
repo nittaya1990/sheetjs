@@ -1,9 +1,9 @@
 # Angular 2+
 
-The library can be imported directly from TS code with:
+The ESM build can be imported directly from TS code with:
 
 ```typescript
-import * as XLSX from 'xlsx';
+import { read, utils, writeFileXLSX } from 'xlsx';
 ```
 
 This demo uses an array of arrays (type `Array<Array<any>>`) as the core state.
@@ -94,7 +94,7 @@ enables testing the development version of the library.  In order to use this
 demo in other applications, add the `xlsx` dependency:
 
 ```bash
-$ npm install --save xlsx
+$ npm install --save https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz
 ```
 
 ## SystemJS Configuration

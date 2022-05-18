@@ -4,8 +4,9 @@
 	"version": "0.0.0",
 	"main": "main.js",
 	"dependencies": {
-		"xlsx": "*",
-		"electron": "^9.0.5"
+		"@electron/remote": "^2.0.8",
+		"electron": "^18.2.0",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
 	},
 	"scripts": {
 		"start": "electron ."

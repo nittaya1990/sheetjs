@@ -1,23 +1,3 @@
-/* map from xlml named formats to SSF TODO: localize */
-var XLMLFormatMap/*{[string]:string}*/ = ({
-	"General Number": "General",
-	"General Date": SSF._table[22],
-	"Long Date": "dddd, mmmm dd, yyyy",
-	"Medium Date": SSF._table[15],
-	"Short Date": SSF._table[14],
-	"Long Time": SSF._table[19],
-	"Medium Time": SSF._table[18],
-	"Short Time": SSF._table[20],
-	"Currency": '"$"#,##0.00_);[Red]\\("$"#,##0.00\\)',
-	"Fixed": SSF._table[2],
-	"Standard": SSF._table[4],
-	"Percent": SSF._table[10],
-	"Scientific": SSF._table[11],
-	"Yes/No": '"Yes";"Yes";"No";@',
-	"True/False": '"True";"True";"False";@',
-	"On/Off": '"Yes";"Yes";"No";@'
-}/*:any*/);
-
 var SSFImplicit/*{[number]:string}*/ = ({
 	"5": '"$"#,##0_);\\("$"#,##0\\)',
 	"6": '"$"#,##0_);[Red]\\("$"#,##0\\)',
@@ -61,7 +41,7 @@ var SSFImplicit/*{[number]:string}*/ = ({
 /* dateNF parse TODO: move to SSF */
 var dateNFregex = /[dD]+|[mM]+|[yYeE]+|[Hh]+|[Ss]+/g;
 function dateNF_regex(dateNF/*:string|number*/)/*:RegExp*/ {
-	var fmt = typeof dateNF == "number" ? SSF._table[dateNF] : dateNF;
+	var fmt = typeof dateNF == "number" ? table_fmt[dateNF] : dateNF;
 	fmt = fmt.replace(dateNFregex, "(\\d+)");
 	return new RegExp("^" + fmt + "$");
 }
@@ -83,5 +63,14 @@ function dateNF_fix(str/*:string*/, dateNF/*:string*/, match/*:Array<string>*/)/
 	if(H == -1 && M == -1 && S == -1) return datestr;
 	if(Y == -1 && m == -1 && d == -1) return timestr;
 	return datestr + "T" + timestr;
+}
+
+/* table of bad formats written by third-party tools */
+var bad_formats = {
+	"d.m": "d\\.m" // Issue #2571 Google Sheets writes invalid format 'd.m', correct format is 'd"."m' or 'd\\.m'
+};
+
+function SSF__load(fmt, idx) {
+	return SSF_load(bad_formats[fmt] || fmt, idx);
 }
 

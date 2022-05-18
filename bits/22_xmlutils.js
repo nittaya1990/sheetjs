@@ -1,8 +1,7 @@
 var XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 var attregexg=/([^"\s?>\/]+)\s*=\s*((?:")([^"]*)(?:")|(?:')([^']*)(?:')|([^'">\s]+))/g;
-var tagregex=/<[\/\?]?[a-zA-Z0-9:_-]+(?:\s+[^"\s?>\/]+\s*=\s*(?:"[^"]*"|'[^']*'|[^'">\s=]+))*\s*[\/\?]?>/mg;
-
-if(!(XML_HEADER.match(tagregex))) tagregex = /<[^>]*>/g;
+var tagregex1=/<[\/\?]?[a-zA-Z0-9:_-]+(?:\s+[^"\s?>\/]+\s*=\s*(?:"[^"]*"|'[^']*'|[^'">\s=]+))*\s*[\/\?]?>/mg, tagregex2 = /<[^>]*>/g;
+var tagregex = /*#__PURE__*/XML_HEADER.match(tagregex1) ? tagregex1 : tagregex2;
 var nsregex=/<\w*:/, nsregex2 = /<(\/?)\w+:/;
 function parsexmltag(tag/*:string*/, skip_root/*:?boolean*/, skip_LC/*:?boolean*/)/*:any*/ {
 	var z = ({}/*:any*/);
@@ -42,22 +41,26 @@ var encodings = {
 	'&lt;': '<',
 	'&amp;': '&'
 };
-var rencoding = evert(encodings);
+var rencoding = /*#__PURE__*/evert(encodings);
 //var rencstr = "&<>'\"".split("");
 
 // TODO: CP remap (need to read file version to determine OS)
-var unescapexml/*:StringConv*/ = (function() {
+var unescapexml/*:StringConv*/ = /*#__PURE__*/(function() {
 	/* 22.4.2.4 bstr (Basic String) */
 	var encregex = /&(?:quot|apos|gt|lt|amp|#x?([\da-fA-F]+));/ig, coderegex = /_x([\da-fA-F]{4})_/ig;
-	return function unescapexml(text/*:string*/)/*:string*/ {
+	function raw_unescapexml(text/*:string*/)/*:string*/ {
 		var s = text + '', i = s.indexOf("<![CDATA[");
 		if(i == -1) return s.replace(encregex, function($$, $1) { return encodings[$$]||String.fromCharCode(parseInt($1,$$.indexOf("x")>-1?16:10))||$$; }).replace(coderegex,function(m,c) {return String.fromCharCode(parseInt(c,16));});
 		var j = s.indexOf("]]>");
-		return unescapexml(s.slice(0, i)) + s.slice(i+9,j) + unescapexml(s.slice(j+3));
+		return raw_unescapexml(s.slice(0, i)) + s.slice(i+9,j) + raw_unescapexml(s.slice(j+3));
+	}
+	return function unescapexml(text/*:string*/, xlsx/*:boolean*/) {
+		var out = raw_unescapexml(text);
+		return xlsx ? out.replace(/\r\n/g, "\n") : out;
 	};
 })();
 
-var decregex=/[&<>'"]/g, charegex = /[\u0000-\u0008\u000b-\u001f]/g;
+var decregex=/[&<>'"]/g, charegex = /[\u0000-\u0008\u000b-\u001f\uFFFE-\uFFFF]/g;
 function escapexml(text/*:string*/)/*:string*/{
 	var s = text + '';
 	return s.replace(decregex, function(y) { return rencoding[y]; }).replace(charegex,function(s) { return "_x" + ("000"+s.charCodeAt(0).toString(16)).slice(-4) + "_";});
@@ -76,24 +79,24 @@ function escapexlml(text/*:string*/)/*:string*/{
 }
 
 /* TODO: handle codepages */
-var xlml_fixstr/*:StringConv*/ = (function() {
+var xlml_fixstr/*:StringConv*/ = /*#__PURE__*/(function() {
 	var entregex = /&#(\d+);/g;
 	function entrepl($$/*:string*/,$1/*:string*/)/*:string*/ { return String.fromCharCode(parseInt($1,10)); }
 	return function xlml_fixstr(str/*:string*/)/*:string*/ { return str.replace(entregex,entrepl); };
 })();
-var xlml_unfixstr/*:StringConv*/ = (function() {
-	return function xlml_unfixstr(str/*:string*/)/*:string*/ { return str.replace(/(\r\n|[\r\n])/g,"\&#10;"); };
-})();
+function xlml_unfixstr(str/*:string*/)/*:string*/ { return str.replace(/(\r\n|[\r\n])/g,"\&#10;"); }
 
+/* note: xsd:boolean valid values: true / 1 / false / 0 */
 function parsexmlbool(value/*:any*/)/*:boolean*/ {
 	switch(value) {
-		case 1: case true: case '1': case 'true': case 'TRUE': return true;
-		/* case '0': case 'false': case 'FALSE':*/
-		default: return false;
+		case 1: case true:  case '1': case 'true':  return true;
+		case 0: case false: case '0': case 'false': return false;
+		//default: throw new Error("Invalid xsd:boolean " + value);
 	}
+	return false;
 }
 
-var utf8read/*:StringConv*/ = function utf8reada(orig/*:string*/)/*:string*/ {
+function utf8reada(orig/*:string*/)/*:string*/ {
 	var out = "", i = 0, c = 0, d = 0, e = 0, f = 0, w = 0;
 	while (i < orig.length) {
 		c = orig.charCodeAt(i++);
@@ -108,9 +111,31 @@ var utf8read/*:StringConv*/ = function utf8reada(orig/*:string*/)/*:string*/ {
 		out += String.fromCharCode(0xDC00 + (w&1023));
 	}
 	return out;
-};
+}
 
-var utf8write/*:StringConv*/ = function(orig/*:string*/)/*:string*/ {
+function utf8readb(data) {
+	var out = new_raw_buf(2*data.length), w, i, j = 1, k = 0, ww=0, c;
+	for(i = 0; i < data.length; i+=j) {
+		j = 1;
+		if((c=data.charCodeAt(i)) < 128) w = c;
+		else if(c < 224) { w = (c&31)*64+(data.charCodeAt(i+1)&63); j=2; }
+		else if(c < 240) { w=(c&15)*4096+(data.charCodeAt(i+1)&63)*64+(data.charCodeAt(i+2)&63); j=3; }
+		else { j = 4;
+			w = (c & 7)*262144+(data.charCodeAt(i+1)&63)*4096+(data.charCodeAt(i+2)&63)*64+(data.charCodeAt(i+3)&63);
+			w -= 65536; ww = 0xD800 + ((w>>>10)&1023); w = 0xDC00 + (w&1023);
+		}
+		if(ww !== 0) { out[k++] = ww&255; out[k++] = ww>>>8; ww = 0; }
+		out[k++] = w%256; out[k++] = w>>>8;
+	}
+	return out.slice(0,k).toString('ucs2');
+}
+
+function utf8readc(data) { return Buffer_from(data, 'binary').toString('utf8'); }
+
+var utf8corpus = "foo bar baz\u00e2\u0098\u0083\u00f0\u009f\u008d\u00a3";
+var utf8read = has_buf && (/*#__PURE__*/utf8readc(utf8corpus) == /*#__PURE__*/utf8reada(utf8corpus) && utf8readc || /*#__PURE__*/utf8readb(utf8corpus) == /*#__PURE__*/utf8reada(utf8corpus) && utf8readb) || utf8reada;
+
+var utf8write/*:StringConv*/ = has_buf ? function(data) { return Buffer_from(data, 'utf8').toString("binary"); } : function(orig/*:string*/)/*:string*/ {
 	var out/*:Array<string>*/ = [], i = 0, c = 0, d = 0;
 	while(i < orig.length) {
 		c = orig.charCodeAt(i++);
@@ -136,33 +161,8 @@ var utf8write/*:StringConv*/ = function(orig/*:string*/)/*:string*/ {
 	return out.join("");
 };
 
-if(has_buf) {
-	var utf8readb = function utf8readb(data) {
-		var out = Buffer.alloc(2*data.length), w, i, j = 1, k = 0, ww=0, c;
-		for(i = 0; i < data.length; i+=j) {
-			j = 1;
-			if((c=data.charCodeAt(i)) < 128) w = c;
-			else if(c < 224) { w = (c&31)*64+(data.charCodeAt(i+1)&63); j=2; }
-			else if(c < 240) { w=(c&15)*4096+(data.charCodeAt(i+1)&63)*64+(data.charCodeAt(i+2)&63); j=3; }
-			else { j = 4;
-				w = (c & 7)*262144+(data.charCodeAt(i+1)&63)*4096+(data.charCodeAt(i+2)&63)*64+(data.charCodeAt(i+3)&63);
-				w -= 65536; ww = 0xD800 + ((w>>>10)&1023); w = 0xDC00 + (w&1023);
-			}
-			if(ww !== 0) { out[k++] = ww&255; out[k++] = ww>>>8; ww = 0; }
-			out[k++] = w%256; out[k++] = w>>>8;
-		}
-		return out.slice(0,k).toString('ucs2');
-	};
-	var corpus = "foo bar baz\u00e2\u0098\u0083\u00f0\u009f\u008d\u00a3";
-	if(utf8read(corpus) == utf8readb(corpus)) utf8read = utf8readb;
-	var utf8readc = function utf8readc(data) { return Buffer_from(data, 'binary').toString('utf8'); };
-	if(utf8read(corpus) == utf8readc(corpus)) utf8read = utf8readc;
-
-	utf8write = function(data) { return Buffer_from(data, 'utf8').toString("binary"); };
-}
-
 // matches <foo>...</foo> extracts content
-var matchtag = (function() {
+var matchtag = /*#__PURE__*/(function() {
 	var mtcache/*:{[k:string]:RegExp}*/ = ({}/*:any*/);
 	return function matchtag(f/*:string*/,g/*:?string*/)/*:RegExp*/ {
 		var t = f+"|"+(g||"");
@@ -171,7 +171,7 @@ var matchtag = (function() {
 	};
 })();
 
-var htmldecode/*:{(s:string):string}*/ = (function() {
+var htmldecode/*:{(s:string):string}*/ = /*#__PURE__*/(function() {
 	var entities/*:Array<[RegExp, string]>*/ = [
 		['nbsp', ' '], ['middot', '·'],
 		['quot', '"'], ['apos', "'"], ['gt',   '>'], ['lt',   '<'], ['amp',  '&']
@@ -195,7 +195,7 @@ var htmldecode/*:{(s:string):string}*/ = (function() {
 	};
 })();
 
-var vtregex = (function(){ var vt_cache = {};
+var vtregex = /*#__PURE__*/(function(){ var vt_cache = {};
 	return function vt_regex(bt) {
 		if(vt_cache[bt] !== undefined) return vt_cache[bt];
 		return (vt_cache[bt] = new RegExp("<(?:vt:)?" + bt + ">([\\s\\S]*?)</(?:vt:)?" + bt + ">", 'g') );
@@ -238,7 +238,24 @@ function write_vt(s, xlsx/*:?boolean*/)/*:string*/ {
 	throw new Error("Unable to serialize " + s);
 }
 
+function xlml_normalize(d)/*:string*/ {
+	if(has_buf &&/*::typeof Buffer !== "undefined" && d != null && d instanceof Buffer &&*/ Buffer.isBuffer(d)) return d.toString('utf8');
+	if(typeof d === 'string') return d;
+	/* duktape */
+	if(typeof Uint8Array !== 'undefined' && d instanceof Uint8Array) return utf8read(a2s(ab2a(d)));
+	throw new Error("Bad input format: expected Buffer or string");
+}
+/* UOS uses CJK in tags */
+var xlmlregex = /<(\/?)([^\s?><!\/:]*:|)([^\s?<>:\/]+)(?:[\s?:\/][^>]*)?>/mg;
+//var xlmlregex = /<(\/?)([a-z0-9]*:|)(\w+)[^>]*>/mg;
+
 var XMLNS = ({
+	CORE_PROPS: 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+	CUST_PROPS: "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+	EXT_PROPS: "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+	CT: 'http://schemas.openxmlformats.org/package/2006/content-types',
+	RELS: 'http://schemas.openxmlformats.org/package/2006/relationships',
+	TCMNT: 'http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments',
 	'dc': 'http://purl.org/dc/elements/1.1/',
 	'dcterms': 'http://purl.org/dc/terms/',
 	'dcmitype': 'http://purl.org/dc/dcmitype/',
@@ -250,7 +267,7 @@ var XMLNS = ({
 	'xsd': 'http://www.w3.org/2001/XMLSchema'
 }/*:any*/);
 
-XMLNS.main = [
+var XMLNS_main = [
 	'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
 	'http://purl.oclc.org/ooxml/spreadsheetml/main',
 	'http://schemas.microsoft.com/office/excel/2006/main',

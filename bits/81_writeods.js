@@ -1,5 +1,16 @@
 /* OpenDocument */
-var write_styles_ods/*:{(wb:any, opts:any):string}*/ = (function() {
+var write_styles_ods/*:{(wb:any, opts:any):string}*/ = /* @__PURE__ */(function() {
+	var master_styles = [
+		'<office:master-styles>',
+			'<style:master-page style:name="mp1" style:page-layout-name="mp1">',
+				'<style:header/>',
+				'<style:header-left style:display="false"/>',
+				'<style:footer/>',
+				'<style:footer-left style:display="false"/>',
+			'</style:master-page>',
+		'</office:master-styles>'
+	].join("");
+
 	var payload = '<office:document-styles ' + wxt_helper({
 		'xmlns:office':   "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
 		'xmlns:table':    "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
@@ -13,12 +24,13 @@ var write_styles_ods/*:{(wb:any, opts:any):string}*/ = (function() {
 		'xmlns:svg':      "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
 		'xmlns:of':       "urn:oasis:names:tc:opendocument:xmlns:of:1.2",
 		'office:version': "1.2"
-	}) + '></office:document-styles>';
+	}) + '>' + master_styles + '</office:document-styles>';
+
 	return function wso(/*::wb, opts*/) {
 		return XML_HEADER + payload;
 	};
 })();
-var write_content_ods/*:{(wb:any, opts:any):string}*/ = (function() {
+var write_content_ods/*:{(wb:any, opts:any):string}*/ = /* @__PURE__ */(function() {
 	/* 6.1.2 White Space Characters */
 	var write_text_p = function(text/*:string*/)/*:string*/ {
 		return escapexml(text)
@@ -161,7 +173,7 @@ var write_content_ods/*:{(wb:any, opts:any):string}*/ = (function() {
 		});
 
 		/* table */
-		o.push('  <style:style style:name="ta1" style:family="table">\n'); // style:master-page-name="mp1">\n');
+		o.push('  <style:style style:name="ta1" style:family="table" style:master-page-name="mp1">\n');
 		o.push('   <style:table-properties table:display="true" style:writing-mode="lr-tb"/>\n');
 		o.push('  </style:style>\n');
 
@@ -242,7 +254,6 @@ var write_content_ods/*:{(wb:any, opts:any):string}*/ = (function() {
 function write_ods(wb/*:any*/, opts/*:any*/) {
 	if(opts.bookType == "fods") return write_content_ods(wb, opts);
 
-	/*:: if(!jszip) throw new Error("JSZip is not available"); */
 	var zip = zip_new();
 	var f = "";
 

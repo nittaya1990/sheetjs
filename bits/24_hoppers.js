@@ -12,9 +12,9 @@ function recordhopper(data, cb/*:RecordHopperCB*/, opts/*:?any*/) {
 		length = tmpbyte & 0x7F;
 		for(cntbyte = 1; cntbyte <4 && (tmpbyte & 0x80); ++cntbyte) length += ((tmpbyte = data.read_shift(1)) & 0x7F)<<(7*cntbyte);
 		tgt = data.l + length;
-		var d = (R.f||parsenoop)(data, length, opts);
+		var d = R.f && R.f(data, length, opts);
 		data.l = tgt;
-		if(cb(d, R.n, RT)) return;
+		if(cb(d, R, RT)) return;
 	}
 }
 
@@ -44,7 +44,7 @@ function buf_array()/*:BufArray*/ {
 
 	var end = function ba_end() {
 		endbuf();
-		return __toBuffer([bufs]);
+		return bconcat(bufs);
 	};
 
 	var push = function ba_push(buf) { endbuf(); curbuf = buf; if(curbuf.l == null) curbuf.l = curbuf.length; next(blksz); };
@@ -52,8 +52,8 @@ function buf_array()/*:BufArray*/ {
 	return ({ next:next, push:push, end:end, _bufs:bufs }/*:any*/);
 }
 
-function write_record(ba/*:BufArray*/, type/*:string*/, payload, length/*:?number*/) {
-	var t/*:number*/ = +XLSBRE[type], l;
+function write_record(ba/*:BufArray*/, type/*:number*/, payload, length/*:?number*/) {
+	var t/*:number*/ = +type, l;
 	if(isNaN(t)) return; // TODO: throw something here?
 	if(!length) length = XLSBRecordEnum[t].p || (payload||[]).length || 0;
 	l = 1 + (t >= 0x80 ? 1 : 0) + 1/* + length*/;

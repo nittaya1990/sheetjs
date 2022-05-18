@@ -5,7 +5,6 @@ declare module 'xlsx' { declare module.exports:XLSXModule; };
 declare module '../' { declare module.exports:XLSXModule; };
 
 declare module 'commander' { declare module.exports:any; };
-declare module './jszip.js' { declare module.exports:any; };
 declare module './dist/cpexcel.js' { declare module.exports:any; };
 declare module 'crypto' { declare module.exports:any; };
 declare module 'fs' { declare module.exports:any; };
@@ -31,7 +30,6 @@ type SSFModule = {
 	_table:SSFTable;
 	init_table:any;
 
-	_general_int:(v:number)=>string;
 	_general_num:(v:number)=>string;
 	_general:(v:number, o:?any)=>string;
 	_eval:any;

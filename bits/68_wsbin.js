@@ -64,7 +64,7 @@ function write_BrtRowHdr(R/*:number*/, range, ws) {
 }
 function write_row_header(ba, ws, range, R) {
 	var o = write_BrtRowHdr(R, range, ws);
-	if((o.length > 17) || (ws['!rows']||[])[R]) write_record(ba, 'BrtRowHdr', o);
+	if((o.length > 17) || (ws['!rows']||[])[R]) write_record(ba, 0x0000 /* BrtRowHdr */, o);
 }
 
 /* [MS-XLSB] 2.4.820 BrtWsDim */
@@ -244,6 +244,12 @@ function write_BrtShortRk(cell, ncell, o) {
 	return o;
 }
 
+/* [MS-XLSB] 2.4.323 BrtCellRString */
+function parse_BrtCellRString(data) {
+	var cell = parse_XLSBCell(data);
+	var value = parse_RichStr(data);
+	return [cell, value, 'is'];
+}
 
 /* [MS-XLSB] 2.4.317 BrtCellSt */
 function parse_BrtCellSt(data) {
@@ -532,7 +538,9 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 
 	XLSBRecordEnum[0x0010] = { n:"BrtShortReal", f:parse_BrtShortReal };
 
-	recordhopper(data, function ws_parse(val, R_n, RT) {
+	var cm, vm;
+
+	recordhopper(data, function ws_parse(val, RR, RT) {
 		if(end) return;
 		switch(RT) {
 			case 0x0094: /* 'BrtWsDim' */
@@ -564,6 +572,7 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 			case 0x0010: /* 'BrtShortReal' */
 			case 0x0011: /* 'BrtShortSt' */
 			case 0x0012: /* 'BrtShortIsst' */
+			case 0x003E: /* 'BrtCellRString' */
 				p = ({t:val[2]}/*:any*/);
 				switch(val[2]) {
 					case 'n': p.v = val[1]; break;
@@ -571,6 +580,7 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 					case 'b': p.v = val[1] ? true : false; break;
 					case 'e': p.v = val[1]; if(opts.cellText !== false) p.w = BErr[p.v]; break;
 					case 'str': p.t = 's'; p.v = val[1]; break;
+					case 'is': p.t = 's'; p.v = val[1].t; break;
 				}
 				if((cf = styles.CellXf[val[0].iStyleRef])) safe_format(p,cf.numFmtId,null,opts, themes, styles);
 				C = val[0].c == -1 ? C + 1 : val[0].c;
@@ -587,19 +597,25 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 					}
 					if(!af && val.length > 3) p.f = val[3];
 				}
+
 				if(refguess.s.r > row.r) refguess.s.r = row.r;
 				if(refguess.s.c > C) refguess.s.c = C;
 				if(refguess.e.r < row.r) refguess.e.r = row.r;
 				if(refguess.e.c < C) refguess.e.c = C;
-				if(opts.cellDates && cf && p.t == 'n' && SSF.is_date(SSF._table[cf.numFmtId])) {
-					var _d = SSF.parse_date_code(p.v); if(_d) { p.t = 'd'; p.v = new Date(_d.y, _d.m-1,_d.d,_d.H,_d.M,_d.S,_d.u); }
+				if(opts.cellDates && cf && p.t == 'n' && fmt_is_date(table_fmt[cf.numFmtId])) {
+					var _d = SSF_parse_date_code(p.v); if(_d) { p.t = 'd'; p.v = new Date(_d.y, _d.m-1,_d.d,_d.H,_d.M,_d.S,_d.u); }
 				}
+				if(cm) {
+					if(cm.type == 'XLDAPR') p.D = true;
+					cm = void 0;
+				}
+				if(vm) vm = void 0;
 				break;
 
 			case 0x0001: /* 'BrtCellBlank' */
 			case 0x000C: /* 'BrtShortBlank' */
 				if(!opts.sheetStubs || pass) break;
-				p = ({t:'z',v:undefined}/*:any*/);
+				p = ({t:'z',v:void 0}/*:any*/);
 				C = val[0].c == -1 ? C + 1 : val[0].c;
 				if(opts.dense) { if(!s[R]) s[R] = []; s[R][C] = p; }
 				else s[encode_col(C) + rr] = p;
@@ -607,10 +623,19 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 				if(refguess.s.c > C) refguess.s.c = C;
 				if(refguess.e.r < row.r) refguess.e.r = row.r;
 				if(refguess.e.c < C) refguess.e.c = C;
+				if(cm) {
+					if(cm.type == 'XLDAPR') p.D = true;
+					cm = void 0;
+				}
+				if(vm) vm = void 0;
 				break;
 
 			case 0x00B0: /* 'BrtMergeCell' */
 				merges.push(val); break;
+
+			case 0x0031: { /* 'BrtCellMeta' */
+				cm = ((opts.xlmeta||{}).Cell||[])[val-1];
+			} break;
 
 			case 0x01EE: /* 'BrtHLink' */
 				var rel = rels['!id'][val.relId];
@@ -699,7 +724,6 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 			case 0x041A: /* 'BrtCFVO14' */
 			case 0x0289: /* 'BrtCellIgnoreEC' */
 			case 0x0451: /* 'BrtCellIgnoreEC14' */
-			case 0x0031: /* 'BrtCellMeta' */
 			case 0x024D: /* 'BrtCellSmartTagProperty' */
 			case 0x025F: /* 'BrtCellWatch' */
 			case 0x0234: /* 'BrtColor' */
@@ -745,14 +769,13 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 			case 0x0024: /* 'BrtFRTEnd' */
 				pass = false; break;
 			case 0x0025: /* 'BrtACBegin' */
-				state.push(R_n); pass = true; break;
+				state.push(RT); pass = true; break;
 			case 0x0026: /* 'BrtACEnd' */
 				state.pop(); pass = false; break;
 
 			default:
-				if((R_n||"").indexOf("Begin") > 0){/* empty */}
-				else if((R_n||"").indexOf("End") > 0){/* empty */}
-				else if(!pass || opts.WTF) throw new Error("Unexpected record " + RT + " " + R_n);
+				if(RR.T){/* empty */}
+				else if(!pass || opts.WTF) throw new Error("Unexpected record 0x" + RT.toString(16));
 		}
 	}, opts);
 
@@ -780,65 +803,65 @@ function parse_ws_bin(data, _opts, idx, rels, wb/*:WBWBProps*/, themes, styles)/
 
 /* TODO: something useful -- this is a stub */
 function write_ws_bin_cell(ba/*:BufArray*/, cell/*:Cell*/, R/*:number*/, C/*:number*/, opts, ws/*:Worksheet*/, last_seen/*:boolean*/)/*:boolean*/ {
+	var o/*:any*/ = ({r:R, c:C}/*:any*/);
+	if(cell.c) ws['!comments'].push([encode_cell(o), cell.c]);
 	if(cell.v === undefined) return false;
 	var vv = "";
 	switch(cell.t) {
 		case 'b': vv = cell.v ? "1" : "0"; break;
 		case 'd': // no BrtCellDate :(
 			cell = dup(cell);
-			cell.z = cell.z || SSF._table[14];
+			cell.z = cell.z || table_fmt[14];
 			cell.v = datenum(parseDate(cell.v)); cell.t = 'n';
 			break;
 		/* falls through */
 		case 'n': case 'e': vv = ''+cell.v; break;
 		default: vv = cell.v; break;
 	}
-	var o/*:any*/ = ({r:R, c:C}/*:any*/);
 	/* TODO: cell style */
 	o.s = get_cell_style(opts.cellXfs, cell, opts);
 	if(cell.l) ws['!links'].push([encode_cell(o), cell.l]);
-	if(cell.c) ws['!comments'].push([encode_cell(o), cell.c]);
 	switch(cell.t) {
 		case 's': case 'str':
 			if(opts.bookSST) {
 				vv = get_sst_id(opts.Strings, (cell.v/*:any*/), opts.revStrings);
 				o.t = "s"; o.v = vv;
-				if(last_seen) write_record(ba, "BrtShortIsst", write_BrtShortIsst(cell, o));
-				else write_record(ba, "BrtCellIsst", write_BrtCellIsst(cell, o));
+				if(last_seen) write_record(ba, 0x0012 /* BrtShortIsst */, write_BrtShortIsst(cell, o));
+				else write_record(ba, 0x0007 /* BrtCellIsst */, write_BrtCellIsst(cell, o));
 			} else {
 				o.t = "str";
-				if(last_seen) write_record(ba, "BrtShortSt", write_BrtShortSt(cell, o));
-				else write_record(ba, "BrtCellSt", write_BrtCellSt(cell, o));
+				if(last_seen) write_record(ba, 0x0011 /* BrtShortSt */, write_BrtShortSt(cell, o));
+				else write_record(ba, 0x0006 /* BrtCellSt */, write_BrtCellSt(cell, o));
 			}
 			return true;
 		case 'n':
 			/* TODO: determine threshold for Real vs RK */
 			if(cell.v == (cell.v | 0) && cell.v > -1000 && cell.v < 1000) {
-				if(last_seen) write_record(ba, "BrtShortRk", write_BrtShortRk(cell, o));
-				else write_record(ba, "BrtCellRk", write_BrtCellRk(cell, o));
+				if(last_seen) write_record(ba, 0x000D /* BrtShortRk */, write_BrtShortRk(cell, o));
+				else write_record(ba, 0x0002 /* BrtCellRk */, write_BrtCellRk(cell, o));
 			} else {
-				if(last_seen) write_record(ba, "BrtShortReal", write_BrtShortReal(cell, o));
-				else write_record(ba, "BrtCellReal", write_BrtCellReal(cell, o));
+				if(last_seen) write_record(ba, 0x0010 /* BrtShortReal */, write_BrtShortReal(cell, o));
+				else write_record(ba, 0x0005 /* BrtCellReal */, write_BrtCellReal(cell, o));
 			} return true;
 		case 'b':
 			o.t = "b";
-			if(last_seen) write_record(ba, "BrtShortBool", write_BrtShortBool(cell, o));
-			else write_record(ba, "BrtCellBool", write_BrtCellBool(cell, o));
+			if(last_seen) write_record(ba, 0x000F /* BrtShortBool */, write_BrtShortBool(cell, o));
+			else write_record(ba, 0x0004 /* BrtCellBool */, write_BrtCellBool(cell, o));
 			return true;
 		case 'e':
 			o.t = "e";
-			if(last_seen) write_record(ba, "BrtShortError", write_BrtShortError(cell, o));
-			else write_record(ba, "BrtCellError", write_BrtCellError(cell, o));
+			if(last_seen) write_record(ba, 0x000E /* BrtShortError */, write_BrtShortError(cell, o));
+			else write_record(ba, 0x0003 /* BrtCellError */, write_BrtCellError(cell, o));
 			return true;
 	}
-	if(last_seen) write_record(ba, "BrtShortBlank", write_BrtShortBlank(cell, o));
-	else write_record(ba, "BrtCellBlank", write_BrtCellBlank(cell, o));
+	if(last_seen) write_record(ba, 0x000C /* BrtShortBlank */, write_BrtShortBlank(cell, o));
+	else write_record(ba, 0x0001 /* BrtCellBlank */, write_BrtCellBlank(cell, o));
 	return true;
 }
 
 function write_CELLTABLE(ba, ws/*:Worksheet*/, idx/*:number*/, opts/*::, wb:Workbook*/) {
 	var range = safe_decode_range(ws['!ref'] || "A1"), ref, rr = "", cols/*:Array<string>*/ = [];
-	write_record(ba, 'BrtBeginSheetData');
+	write_record(ba, 0x0091 /* BrtBeginSheetData */);
 	var dense = Array.isArray(ws);
 	var cap = range.e.r;
 	if(ws['!rows']) cap = Math.max(range.e.r, ws['!rows'].length - 1);
@@ -858,28 +881,28 @@ function write_CELLTABLE(ba, ws/*:Worksheet*/, idx/*:number*/, opts/*::, wb:Work
 			last_seen = write_ws_bin_cell(ba, cell, R, C, opts, ws, last_seen);
 		}
 	}
-	write_record(ba, 'BrtEndSheetData');
+	write_record(ba, 0x0092 /* BrtEndSheetData */);
 }
 
 function write_MERGECELLS(ba, ws/*:Worksheet*/) {
 	if(!ws || !ws['!merges']) return;
-	write_record(ba, 'BrtBeginMergeCells', write_BrtBeginMergeCells(ws['!merges'].length));
-	ws['!merges'].forEach(function(m) { write_record(ba, 'BrtMergeCell', write_BrtMergeCell(m)); });
-	write_record(ba, 'BrtEndMergeCells');
+	write_record(ba, 0x00B1 /* BrtBeginMergeCells */, write_BrtBeginMergeCells(ws['!merges'].length));
+	ws['!merges'].forEach(function(m) { write_record(ba, 0x00B0 /* BrtMergeCell */, write_BrtMergeCell(m)); });
+	write_record(ba, 0x00B2 /* BrtEndMergeCells */);
 }
 
 function write_COLINFOS(ba, ws/*:Worksheet*//*::, idx:number, opts, wb:Workbook*/) {
 	if(!ws || !ws['!cols']) return;
-	write_record(ba, 'BrtBeginColInfos');
-	ws['!cols'].forEach(function(m, i) { if(m) write_record(ba, 'BrtColInfo', write_BrtColInfo(i, m)); });
-	write_record(ba, 'BrtEndColInfos');
+	write_record(ba, 0x0186 /* BrtBeginColInfos */);
+	ws['!cols'].forEach(function(m, i) { if(m) write_record(ba, 0x003C /* 'BrtColInfo' */, write_BrtColInfo(i, m)); });
+	write_record(ba, 0x0187 /* BrtEndColInfos */);
 }
 
 function write_IGNOREECS(ba, ws/*:Worksheet*/) {
 	if(!ws || !ws['!ref']) return;
-	write_record(ba, 'BrtBeginCellIgnoreECs');
-	write_record(ba, 'BrtCellIgnoreEC', write_BrtCellIgnoreEC(safe_decode_range(ws['!ref'])));
-	write_record(ba, 'BrtEndCellIgnoreECs');
+	write_record(ba, 0x0288 /* BrtBeginCellIgnoreECs */);
+	write_record(ba, 0x0289 /* BrtCellIgnoreEC */, write_BrtCellIgnoreEC(safe_decode_range(ws['!ref'])));
+	write_record(ba, 0x028A /* BrtEndCellIgnoreECs */);
 }
 
 function write_HLINKS(ba, ws/*:Worksheet*/, rels) {
@@ -887,7 +910,7 @@ function write_HLINKS(ba, ws/*:Worksheet*/, rels) {
 	ws['!links'].forEach(function(l) {
 		if(!l[1].Target) return;
 		var rId = add_rels(rels, -1, l[1].Target.replace(/#.*$/, ""), RELS.HLINK);
-		write_record(ba, "BrtHLink", write_BrtHLink(l, rId));
+		write_record(ba, 0x01EE /* BrtHLink */, write_BrtHLink(l, rId));
 	});
 	delete ws['!links'];
 }
@@ -895,7 +918,7 @@ function write_LEGACYDRAWING(ba, ws/*:Worksheet*/, idx/*:number*/, rels) {
 	/* [BrtLegacyDrawing] */
 	if(ws['!comments'].length > 0) {
 		var rId = add_rels(rels, -1, "../drawings/vmlDrawing" + (idx+1) + ".vml", RELS.VML);
-		write_record(ba, "BrtLegacyDrawing", write_RelID("rId" + rId));
+		write_record(ba, 0x0227 /* BrtLegacyDrawing */, write_RelID("rId" + rId));
 		ws['!legacy'] = rId;
 	}
 }
@@ -919,37 +942,37 @@ function write_AUTOFILTER(ba, ws, wb, idx) {
 	}
 	if(i == names.length) names.push({ Name: '_xlnm._FilterDatabase', Sheet: idx, Ref: "'" + wb.SheetNames[idx] + "'!" + ref  });
 
-	write_record(ba, "BrtBeginAFilter", write_UncheckedRfX(safe_decode_range(ref)));
+	write_record(ba, 0x00A1 /* BrtBeginAFilter */, write_UncheckedRfX(safe_decode_range(ref)));
 	/* *FILTERCOLUMN */
 	/* [SORTSTATE] */
 	/* BrtEndAFilter */
-	write_record(ba, "BrtEndAFilter");
+	write_record(ba, 0x00A2 /* BrtEndAFilter */);
 }
 
 function write_WSVIEWS2(ba, ws, Workbook) {
-	write_record(ba, "BrtBeginWsViews");
+	write_record(ba, 0x0085 /* BrtBeginWsViews */);
 	{ /* 1*WSVIEW2 */
 		/* [ACUID] */
-		write_record(ba, "BrtBeginWsView", write_BrtBeginWsView(ws, Workbook));
+		write_record(ba, 0x0089 /* BrtBeginWsView */, write_BrtBeginWsView(ws, Workbook));
 		/* [BrtPane] */
 		/* *4BrtSel */
 		/* *4SXSELECT */
 		/* *FRT */
-		write_record(ba, "BrtEndWsView");
+		write_record(ba, 0x008A /* BrtEndWsView */);
 	}
 	/* *FRT */
-	write_record(ba, "BrtEndWsViews");
+	write_record(ba, 0x0086 /* BrtEndWsViews */);
 }
 
 function write_WSFMTINFO(/*::ba, ws*/) {
 	/* [ACWSFMTINFO] */
-	//write_record(ba, "BrtWsFmtInfo", write_BrtWsFmtInfo(ws));
+	// write_record(ba, 0x01E5 /* BrtWsFmtInfo */, write_BrtWsFmtInfo(ws));
 }
 
 function write_SHEETPROTECT(ba, ws) {
 	if(!ws['!protect']) return;
 	/* [BrtSheetProtectionIso] */
-	write_record(ba, "BrtSheetProtection", write_BrtSheetProtection(ws['!protect']));
+	write_record(ba, 0x0217 /* BrtSheetProtection */, write_BrtSheetProtection(ws['!protect']));
 }
 
 function write_ws_bin(idx/*:number*/, opts, wb/*:Workbook*/, rels) {
@@ -965,9 +988,9 @@ function write_ws_bin(idx/*:number*/, opts, wb/*:Workbook*/, rels) {
 	ws['!links'] = [];
 	/* passed back to write_zip and removed there */
 	ws['!comments'] = [];
-	write_record(ba, "BrtBeginSheet");
-	if(wb.vbaraw || ws['!outline']) write_record(ba, "BrtWsProp", write_BrtWsProp(c, ws['!outline']));
-	write_record(ba, "BrtWsDim", write_BrtWsDim(r));
+	write_record(ba, 0x0081 /* BrtBeginSheet */);
+	if(wb.vbaraw || ws['!outline']) write_record(ba, 0x0093 /* BrtWsProp */, write_BrtWsProp(c, ws['!outline']));
+	write_record(ba, 0x0094 /* BrtWsDim */, write_BrtWsDim(r));
 	write_WSVIEWS2(ba, ws, wb.Workbook);
 	write_WSFMTINFO(ba, ws);
 	write_COLINFOS(ba, ws, idx, opts, wb);
@@ -986,7 +1009,7 @@ function write_ws_bin(idx/*:number*/, opts, wb/*:Workbook*/, rels) {
 	/* [DVALS] */
 	write_HLINKS(ba, ws, rels);
 	/* [BrtPrintOptions] */
-	if(ws['!margins']) write_record(ba, "BrtMargins", write_BrtMargins(ws['!margins']));
+	if(ws['!margins']) write_record(ba, 0x01DC /* BrtMargins */, write_BrtMargins(ws['!margins']));
 	/* [BrtPageSetup] */
 	/* [HEADERFOOTER] */
 	/* [RWBRK] */
@@ -1004,6 +1027,6 @@ function write_ws_bin(idx/*:number*/, opts, wb/*:Workbook*/, rels) {
 	/* [WEBPUBITEMS] */
 	/* [LISTPARTS] */
 	/* FRTWORKSHEET */
-	write_record(ba, "BrtEndSheet");
+	write_record(ba, 0x0082 /* BrtEndSheet */);
 	return ba.end();
 }

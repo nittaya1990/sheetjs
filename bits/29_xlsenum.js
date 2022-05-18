@@ -1,4 +1,5 @@
 /* [MS-OLEPS] 2.2 PropertyType */
+// Note: some tree shakers cannot handle VT_VECTOR | $CONST, hence extra vars
 //var VT_EMPTY    = 0x0000;
 //var VT_NULL     = 0x0001;
 var VT_I2       = 0x0002;
@@ -20,7 +21,7 @@ var VT_UI4      = 0x0013;
 //var VT_UI8      = 0x0015;
 //var VT_INT      = 0x0016;
 //var VT_UINT     = 0x0017;
-var VT_LPSTR    = 0x001E;
+//var VT_LPSTR    = 0x001E;
 //var VT_LPWSTR   = 0x001F;
 var VT_FILETIME = 0x0040;
 var VT_BLOB     = 0x0041;
@@ -32,7 +33,9 @@ var VT_BLOB     = 0x0041;
 var VT_CF       = 0x0047;
 //var VT_CLSID    = 0x0048;
 //var VT_VERSIONED_STREAM = 0x0049;
-var VT_VECTOR   = 0x1000;
+//var VT_VECTOR   = 0x1000;
+var VT_VECTOR_VARIANT = 0x100C;
+var VT_VECTOR_LPSTR   = 0x101E;
 //var VT_ARRAY    = 0x2000;
 
 var VT_STRING   = 0x0050; // 2.3.3.1.11 VtString
@@ -52,8 +55,8 @@ var DocSummaryPIDDSI = {
 	/*::[*/0x09/*::]*/: { n: 'HiddenCount', t: VT_I4 },
 	/*::[*/0x0a/*::]*/: { n: 'MultimediaClipCount', t: VT_I4 },
 	/*::[*/0x0b/*::]*/: { n: 'ScaleCrop', t: VT_BOOL },
-	/*::[*/0x0c/*::]*/: { n: 'HeadingPairs', t: VT_VECTOR | VT_VARIANT },
-	/*::[*/0x0d/*::]*/: { n: 'TitlesOfParts', t: VT_VECTOR | VT_LPSTR },
+	/*::[*/0x0c/*::]*/: { n: 'HeadingPairs', t: VT_VECTOR_VARIANT /* VT_VECTOR | VT_VARIANT */ },
+	/*::[*/0x0d/*::]*/: { n: 'TitlesOfParts', t: VT_VECTOR_LPSTR /* VT_VECTOR | VT_LPSTR */ },
 	/*::[*/0x0e/*::]*/: { n: 'Manager', t: VT_STRING },
 	/*::[*/0x0f/*::]*/: { n: 'Company', t: VT_STRING },
 	/*::[*/0x10/*::]*/: { n: 'LinksUpToDate', t: VT_BOOL },
@@ -66,7 +69,11 @@ var DocSummaryPIDDSI = {
 	/*::[*/0x1B/*::]*/: { n: 'ContentStatus', t: VT_STRING },
 	/*::[*/0x1C/*::]*/: { n: 'Language', t: VT_STRING },
 	/*::[*/0x1D/*::]*/: { n: 'Version', t: VT_STRING },
-	/*::[*/0xFF/*::]*/: {}
+	/*::[*/0xFF/*::]*/: {},
+	/* [MS-OLEPS] 2.18 */
+	/*::[*/0x80000000/*::]*/: { n: 'Locale', t: VT_UI4 },
+	/*::[*/0x80000003/*::]*/: { n: 'Behavior', t: VT_UI4 },
+	/*::[*/0x72627262/*::]*/: {}
 };
 
 /* [MS-OSHARED] 2.3.3.2.1.1 Summary Information Property Set PIDSI */
@@ -90,23 +97,12 @@ var SummaryPIDSI = {
 	/*::[*/0x11/*::]*/: { n: 'Thumbnail', t: VT_CF },
 	/*::[*/0x12/*::]*/: { n: 'Application', t: VT_STRING },
 	/*::[*/0x13/*::]*/: { n: 'DocSecurity', t: VT_I4 },
-	/*::[*/0xFF/*::]*/: {}
-};
-
-/* [MS-OLEPS] 2.18 */
-var SpecialProperties = {
+	/*::[*/0xFF/*::]*/: {},
+	/* [MS-OLEPS] 2.18 */
 	/*::[*/0x80000000/*::]*/: { n: 'Locale', t: VT_UI4 },
 	/*::[*/0x80000003/*::]*/: { n: 'Behavior', t: VT_UI4 },
 	/*::[*/0x72627262/*::]*/: {}
 };
-
-(function() {
-	for(var y in SpecialProperties) if(Object.prototype.hasOwnProperty.call(SpecialProperties, y))
-	DocSummaryPIDDSI[y] = SummaryPIDSI[y] = SpecialProperties[y];
-})();
-
-var DocSummaryRE/*:{[key:string]:string}*/ = evert_key(DocSummaryPIDDSI, "n");
-var SummaryRE/*:{[key:string]:string}*/ = evert_key(SummaryPIDSI, "n");
 
 /* [MS-XLS] 2.4.63 Country/Region codes */
 var CountryEnum = {
@@ -189,7 +185,7 @@ function rgbify(arr/*:Array<number>*/)/*:Array<[number, number, number]>*/ { ret
 
 /* [MS-XLS] 2.5.161 */
 /* [MS-XLSB] 2.5.75 Icv */
-var _XLSIcv = rgbify([
+var _XLSIcv = /*#__PURE__*/ rgbify([
 	/* Color Constants */
 	0x000000,
 	0xFFFFFF,
@@ -281,7 +277,7 @@ var _XLSIcv = rgbify([
 	0x000000, /* 0x50 icvInfoBk ?? */
 	0x000000 /* 0x51 icvInfoText ?? */
 ]);
-var XLSIcv = dup(_XLSIcv);
+var XLSIcv = /*#__PURE__*/dup(_XLSIcv);
 
 /* [MS-XLSB] 2.5.97.2 */
 var BErr = {
@@ -295,4 +291,16 @@ var BErr = {
 	/*::[*/0x2B/*::]*/: "#GETTING_DATA",
 	/*::[*/0xFF/*::]*/: "#WTF?"
 };
-var RBErr = evert_num(BErr);
+//var RBErr = evert_num(BErr);
+var RBErr = {
+	"#NULL!":        0x00,
+	"#DIV/0!":       0x07,
+	"#VALUE!":       0x0F,
+	"#REF!":         0x17,
+	"#NAME?":        0x1D,
+	"#NUM!":         0x24,
+	"#N/A":          0x2A,
+	"#GETTING_DATA": 0x2B,
+	"#WTF?":         0xFF
+};
+

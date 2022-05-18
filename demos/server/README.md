@@ -14,7 +14,7 @@ appropriate error checking or other production-level features.
 The following commands are required in order to test the [Express](https://github.com/expressjs/express) demo:
 
 ```bash
-npm install express printj xlsx express-formidable
+npm install express printj express-formidable https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz
 node express.js
 ```
 
@@ -23,9 +23,9 @@ node express.js
 The following commands are required in order to test the [Koa](https://github.com/koajs/koa) demo:
 
 ```bash
-npm install koa printj formidable xlsx
+npm install koa printj formidable https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz
 node koa.js
-``` 
+```
 
 ### Hapi Setup
 
@@ -34,9 +34,9 @@ node koa.js
 The following commands are required in order to test the [Hapi](https://github.com/hapijs/hapi) demo:
 
 ```bash
-npm install hapi@16.x printj tiny-worker xlsx
+npm install hapi@16.x printj tiny-worker https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz
 node hapi.js
-``` 
+```
 
 
 
@@ -162,5 +162,47 @@ curl -X POST http://localhost:7262/file?f=sheetjs.csv
 # write sheetjs.xlsb in the XLSB format
 curl -X GET http://localhost:7262/?f=sheetjs.xlsb
 ```
+
+
+
+## NestJS
+
+[NestJS](https://nestjs.com/) is a Node.js framework for server-side web applications.
+
+This demo uses SheetJS to parse a spreadsheet via a POST API endpoint. The file
+arrives to the endpoint as body `form-data`, accessible using the `file` key.
+After parsing the file, CSV contents of the first worksheet will be returned.
+[Body parsing uses `multer`](https://docs.nestjs.com/techniques/file-upload).
+
+Before running the demo, the NestJS CLI tool must be installed.  The instruction
+is described in the NestJS ["First Steps"](https://docs.nestjs.com/first-steps):
+
+```bash
+npm i -g @nestjs/cli
+make nest
+```
+
+The demo can be tested using the `/sheetjs/upload-xlsx-file` endpoint:
+
+```bash
+curl -X POST -F "file=@test.xlsx" http://localhost:3000/sheetjs/upload-xlsx-file
+```
+
+The included [`nest.sh`](./nest.sh) script creates and configures the project.
+
+
+This demo creates a module and a controller.  The controller handles the actual
+requests (creating the endpoint) while the module is used to configure `multer`.
+
+
+
+## Deno
+
+[`Drash`](https://drash.land/drash/) is a Deno framework for Deno's HTTP server.
+
+The `drash.ts` demo responds to POST requests and responds with HTML previews.
+
+<https://s2c.deno.dev> is a live deployment of the service.
+
 
 [![Analytics](https://ga-beacon.appspot.com/UA-36810333-1/SheetJS/js-xlsx?pixel)](https://github.com/SheetJS/js-xlsx)

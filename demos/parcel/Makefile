@@ -1,7 +1,12 @@
 .PHONY: app
-app:
-	parcel build index.html --public-url ./
+app: init
+	npx parcel build index.html
+
+.PHONY: init
+init:
+	mkdir -p node_modules
+	npm i
 
 .PHONY: ctest 
-ctest:
-	parcel index.html
+ctest: init
+	npx parcel index.html
